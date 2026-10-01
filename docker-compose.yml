@@ -1,0 +1,27 @@
+services:
+  db:
+    image: mysql:8.0
+    container_name: analise_credito_ia_db
+    environment:
+      MYSQL_DATABASE: analise_credito_ia
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+  app:
+    build: .
+    container_name: analise_credito_ia_app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - .:/app
+    ports:
+      - "8082:8000"
+    env_file:
+      - .env
+    depends_on:
+      - db
+
+volumes:
+  mysql_data:
