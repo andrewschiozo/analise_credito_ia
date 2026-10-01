@@ -1,0 +1,30 @@
+# Variáveis de ambiente e credenciais
+.env
+.env.*
+!.env.example
+
+# Python / Bytecode / Caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Ambientes Virtuais
+.venv/
+venv/
+ENV/
+env/
+
+# Testes e Cobertura
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+.vscode/
+
+# Logs e Dados Locais (caso use algum banco local de teste como SQLite)
+*.log
+*.sqlite3
+*.db
