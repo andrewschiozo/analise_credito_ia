@@ -1,7 +1,7 @@
 from datetime import datetime
 from sqlalchemy import Column, Integer, String, BigInteger, Boolean, DateTime, Text, Enum as SQLAlchemyEnum
 from app.core.database import Base
-from app.core.simulacao_status import SimulacaoStatus
+from app.core.simulacao_status_enum import SimulacaoStatus
 
 class SimulacaoModel(Base):
     __tablename__ = "simulacoes"
