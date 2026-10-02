@@ -36,5 +36,10 @@ cp .env.example .env
 docker compose up --build
 ```
 
+ou com as dependências de dev
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+```
 ### 4. URLs
 Swagger UI: http://localhost:8082/docs
