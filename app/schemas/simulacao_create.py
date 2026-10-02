@@ -9,6 +9,13 @@ class SimulacaoCreateSchema(BaseModel):
     finalidade: str = Field(..., description="Finalidade do crédito (ex: Capital de Giro, Reforma, Veículo)", max_length=100)
     lgpd_consentimento: bool = Field(..., description="Consentimento explícito para tratamento de dados (LGPD)")
 
+    @field_validator("nome_cliente")
+    @classmethod
+    def validar_nome_completo(cls, v: str) -> str:
+        if len(v.strip().split()) < 2:
+            raise ValueError("É obrigatório fornecer o nome completo.")
+        return v
+
     @field_validator("lgpd_consentimento")
     @classmethod
     def validar_consentimento_lgpd(cls, v: bool) -> bool:
