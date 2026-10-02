@@ -9,13 +9,18 @@ class ParecerIADTO(BaseModel):
     status_sugerido: str = Field(..., description="Deve ser estritamente: APROVADO, REPROVADO ou ANALISE_MANUAL")
     taxa_juros_sugerida: float = Field(..., description="Taxa de juros mensal sugerida em percentual (ex: 2.15)")
     margem_comprometida_percentual: float = Field(..., description="Percentual comprometido da renda mensal com a parcela")
-    motivo_tecnico: str = Field(..., description="Justificativa técnica detalhada baseada em risco de crédito")
+    motivo_tecnico: str = Field(
+        ..., 
+        max_length=150,
+        description="Justificativa técnica extremamente direta e concisa. Máximo 150 caracteres."
+    )
 
 class AIService:
     def __init__(self):
         self.llm = ChatGoogleGenerativeAI(
             model="gemma-4-26b-a4b-it",
             temperature=0.1, # baixa temperatura pra evitar respostas criativas
+            max_output_tokens=300,
             google_api_key=os.getenv("GEMINI_API_KEY")
         )
         # força response estruturado
@@ -34,17 +39,23 @@ class AIService:
                        "Regras básicas: "
                        "1. Se a parcela estimada comprometer mais do que 35% da renda, o status deve ser REPROVADO ou ANALISE_MANUAL. "
                        "2. Forneça uma taxa de juros realista para o mercado PF brasileiro. "
+                       "Ao preencher o campo 'motivo_tecnico', seja extremamente direto e conciso. Sua resposta NÃO PODE ultrapassar 150 caracteres sob nenhuma hipótese. "
                        "Retorne estritamente o formato solicitado."),
             ("user", "Dados da Simulação:\n"
-                     f"- Renda Mensal: R$ {renda_reais:.2f}\n"
-                     f"- Valor Solicitado: R$ {valor_reais:.2f}\n"
-                     f"- Prazo: {prazo_meses} meses\n"
-                     f"- Finalidade: {finalidade}")
+                     "- Renda Mensal: R$ {renda_reais}\n"
+                     "- Valor Solicitado: R$ {valor_reais}\n"
+                     "- Prazo: {prazo_meses} meses\n"
+                     "- Finalidade: {finalidade}")
         ])
 
         chain = prompt | self.structured_llm
 
-        resultado: ParecerIADTO = chain.invoke({})
+        resultado: ParecerIADTO = chain.invoke({
+            "renda_reais": f"{renda_reais:.2f}",
+            "valor_reais": f"{valor_reais:.2f}",
+            "prazo_meses": str(prazo_meses),
+            "finalidade": finalidade
+        })
         
         # mapper status da IA para simulacao status enum
         mapa_status = {
