@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 from app.core.simulacao_status_enum import SimulacaoStatus
 from app.repositories.simulacao_repository import SimulacaoRepository
+from app.services.guardrails_service import GuardrailsService
 from app.services.ai_service import AIService
 from app.schemas.simulacao_create import SimulacaoCreateSchema
 from app.models.simulacao import SimulacaoModel
@@ -9,11 +10,15 @@ from typing import Optional, List
 class CreditService:
     def __init__(self, db: Session):
         self.repository = SimulacaoRepository(db)
+        self.guardrails_service = GuardrailsService()
         self.ai_service = AIService()
 
     def processar_nova_simulacao(self, dados: SimulacaoCreateSchema) -> SimulacaoModel:
         """Orquestra a criação da simulação, disparo síncrono da IA e atualização do status."""
         
+        # guard rails
+        self.guardrails_service.validar_entrada(dados.finalidade)
+
         # cria a simulação PENDENTE_IA
         simulacao = self.repository.criar(dados)
 
