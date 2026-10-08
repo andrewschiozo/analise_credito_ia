@@ -28,3 +28,4 @@ htmlcov/
 *.log
 *.sqlite3
 *.db
+chroma_db/
