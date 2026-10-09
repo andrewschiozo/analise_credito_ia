@@ -29,7 +29,7 @@ class AIService:
         )
 
         self.rag_service = RAGService()
-        self.structured_llm = self.llm.with_structured_output(ParecerIADTO)
+        self.structured_llm = self.llm.with_structured_output(ParecerIADTO, include_raw=True)
 
     def analisar_credito(self, renda_centavos: int, valor_solicitado_centavos: int, prazo_meses: int, finalidade: str) -> Dict[str, Any]:
         """Analisa a proposta de crédito aplicando regras de negócio via IA estruturada."""
@@ -41,7 +41,7 @@ class AIService:
         prompt = self._montar_prompt()
         
         chain = prompt | self.structured_llm
-        resultado = chain.invoke({
+        response = chain.invoke({
             "renda_reais": f"{renda_reais:.2f}",
             "valor_reais": f"{valor_reais:.2f}",
             "prazo_meses": str(prazo_meses),
@@ -49,14 +49,15 @@ class AIService:
             "conteudo_rag": conteudo_rag
         })
 
-        return self._formatar_resposta(resultado)
+        return self._formatar_resposta(response)
         
     def _montar_prompt(self) -> ChatPromptTemplate:
         return ChatPromptTemplate.from_messages([
             ("system", "Você é um analista de risco de crédito sênior de um banco digital brasileiro. "
                        "Analise a solicitação de empréstimo ESTRITAMENTE pelas Políticas do Banco abaixo.\n\n"
                        "Políticas do Banco:\n{conteudo_rag}\n\n"
-                       "Se a proposta violar qualquer regra, devolva REPROVADO ou ANALISE_MANUAL."),
+                       "Se a proposta violar qualquer regra, devolva REPROVADO ou ANALISE_MANUAL.\n"
+                       "O motivo técnico deve ter no máximo 140 caracteres"),
             ("user", "Dados da Simulação:\n"
                      "- Renda Mensal: R$ {renda_reais}\n"
                      "- Valor Solicitado: R$ {valor_reais}\n"
@@ -64,17 +65,30 @@ class AIService:
                      "- Finalidade: {finalidade}")
         ])
     
-    def _formatar_resposta(self, resultado: ParecerIADTO) -> Dict[str, Any]:
+    def _formatar_resposta(self, response) -> Dict[str, Any]:
+        parecerAIDto: ParecerIADTO = response["parsed"]
+        tokens_gastos = self._extrair_total_tokens(response)
+
         mapa_status = {
             "APROVADO": SimulacaoStatus.APROVADO_IA.value,
             "REPROVADO": SimulacaoStatus.REPROVADO_IA.value,
             "ANALISE_MANUAL": SimulacaoStatus.ANALISE_MANUAL.value
         }
         
-        status_final = mapa_status.get(resultado.status_sugerido.upper(), SimulacaoStatus.ANALISE_MANUAL.value)
+        status_final = mapa_status.get(parecerAIDto.status_sugerido.upper(), SimulacaoStatus.ANALISE_MANUAL.value)
 
         return {
             "status": status_final,
-            "parecer_ia": resultado.model_dump_json(),
-            "tokens_gastos": 0
+            "parecer_ia": parecerAIDto.model_dump_json(),
+            "tokens_gastos": tokens_gastos
         }
+        
+    def _extrair_total_tokens(self, resposta_chain: Dict[str, Any]) -> int:
+        """Abstração isolada para coletar o uso de tokens de forma agnóstica de provedor."""
+        try:
+            raw_message = resposta_chain.get("raw")
+            if raw_message and hasattr(raw_message, "usage_metadata") and raw_message.usage_metadata:
+                return raw_message.usage_metadata.get("total_tokens", 0)
+        except Exception:
+            pass
+        return 0
