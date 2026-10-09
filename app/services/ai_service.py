@@ -1,15 +1,15 @@
 import os
-from typing import Dict, Any
-from pydantic import BaseModel, Field
-from langchain_core.prompts import ChatPromptTemplate
-from langchain.chat_models import init_chat_model
+
 from app.core.simulacao_status_enum import SimulacaoStatus
 from app.services.rag_service import RAGService
+from langchain_core.prompts import ChatPromptTemplate
+from langchain.chat_models import init_chat_model
+from pydantic import BaseModel, Field
+from typing import Dict, Any
 
 class ParecerIADTO(BaseModel):
     status_sugerido: str = Field(..., description="Deve ser estritamente: APROVADO, REPROVADO ou ANALISE_MANUAL")
     taxa_juros_sugerida: float = Field(..., description="Taxa de juros mensal sugerida em percentual (ex: 2.15)")
-    margem_comprometida_percentual: float = Field(..., description="Percentual comprometido da renda mensal com a parcela")
     motivo_tecnico: str = Field(
         ..., 
         max_length=150,
@@ -29,43 +29,42 @@ class AIService:
         )
 
         self.rag_service = RAGService()
+        self.structured_llm = self.llm.with_structured_output(ParecerIADTO)
 
     def analisar_credito(self, renda_centavos: int, valor_solicitado_centavos: int, prazo_meses: int, finalidade: str) -> Dict[str, Any]:
         """Analisa a proposta de crédito aplicando regras de negócio via IA estruturada."""
 
-        # força response estruturado
-        self.structured_llm = self.llm.with_structured_output(ParecerIADTO)
-
-        # conversao de centavos para reais
         renda_reais = renda_centavos / 100
         valor_reais = valor_solicitado_centavos / 100
 
         conteudo_rag = self.rag_service.recuperar_contexto(finalidade)
+        prompt = self._montar_prompt()
         
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", "Você é um analista de risco de crédito sênior de um banco digital brasileiro. "
-                       "Analise a solicitação de empréstimo considerando a renda mensal, o valor solicitado e o prazo. "
-                       "Políticas do Banco : "
-                       "{conteudo_rag}"
-                       "Se a proposta violar qualquer regra, rejeite ou mande para análise manual. Retorne estritamente o formato solicitado."),
-            ("user", "Dados da Simulação:\n"
-                     "- Renda Mensal: R$ {renda_reais}\n"
-                     "- Valor Solicitado: R$ {valor_reais}\n"
-                     "- Prazo: {prazo_meses} meses\n"
-                     "- Finalidade: {finalidade}")
-        ])
-
         chain = prompt | self.structured_llm
-
-        resultado: ParecerIADTO = chain.invoke({
+        resultado = chain.invoke({
             "renda_reais": f"{renda_reais:.2f}",
             "valor_reais": f"{valor_reais:.2f}",
             "prazo_meses": str(prazo_meses),
             "finalidade": finalidade,
             "conteudo_rag": conteudo_rag
         })
+
+        return self._formatar_resposta(resultado)
         
-        # mapper status da IA para simulacao status enum
+    def _montar_prompt(self) -> ChatPromptTemplate:
+        return ChatPromptTemplate.from_messages([
+            ("system", "Você é um analista de risco de crédito sênior de um banco digital brasileiro. "
+                       "Analise a solicitação de empréstimo ESTRITAMENTE pelas Políticas do Banco abaixo.\n\n"
+                       "Políticas do Banco:\n{conteudo_rag}\n\n"
+                       "Se a proposta violar qualquer regra, devolva REPROVADO ou ANALISE_MANUAL."),
+            ("user", "Dados da Simulação:\n"
+                     "- Renda Mensal: R$ {renda_reais}\n"
+                     "- Valor Solicitado: R$ {valor_reais}\n"
+                     "- Prazo: {prazo_meses} meses\n"
+                     "- Finalidade: {finalidade}")
+        ])
+    
+    def _formatar_resposta(self, resultado: ParecerIADTO) -> Dict[str, Any]:
         mapa_status = {
             "APROVADO": SimulacaoStatus.APROVADO_IA.value,
             "REPROVADO": SimulacaoStatus.REPROVADO_IA.value,
@@ -77,5 +76,5 @@ class AIService:
         return {
             "status": status_final,
             "parecer_ia": resultado.model_dump_json(),
-            "tokens_gastos": 150 # chumbado por enquanto
+            "tokens_gastos": 0
         }
